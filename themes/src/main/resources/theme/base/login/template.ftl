@@ -160,6 +160,7 @@
 
     </div>
   </div>
+  <#nested "before_end">
 </body>
 </html>
 </#macro>
