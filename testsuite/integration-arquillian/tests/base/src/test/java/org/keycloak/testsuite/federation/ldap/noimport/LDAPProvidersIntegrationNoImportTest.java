@@ -26,12 +26,13 @@ import jakarta.ws.rs.core.Response;
 import java.util.Map;
 
 import org.junit.Assert;
-import org.junit.Assume;
+import org.junit.Before;
 import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 import org.keycloak.admin.client.resource.ComponentResource;
+import org.keycloak.admin.client.resource.UserProfileResource;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.component.ComponentModel;
 import org.keycloak.models.LDAPConstants;
@@ -52,6 +53,7 @@ import org.keycloak.testsuite.admin.ApiUtil;
 import org.keycloak.testsuite.federation.ldap.LDAPProvidersIntegrationTest;
 import org.keycloak.testsuite.federation.ldap.LDAPTestAsserts;
 import org.keycloak.testsuite.federation.ldap.LDAPTestContext;
+import org.keycloak.testsuite.forms.VerifyProfileTest;
 import org.keycloak.testsuite.util.LDAPTestUtils;
 
 
@@ -67,6 +69,12 @@ public class LDAPProvidersIntegrationNoImportTest extends LDAPProvidersIntegrati
         return false;
     }
 
+    @Before
+    public void enableUserProfileUnmanagedAttributes() {
+        UserProfileResource userProfileRes = testRealm().users().userProfile();
+        VerifyProfileTest.enableUnmanagedAttributes(userProfileRes);
+    }
+
 
     @Override
     protected void assertFederatedUserLink(UserRepresentation user) {
@@ -76,7 +84,7 @@ public class LDAPProvidersIntegrationNoImportTest extends LDAPProvidersIntegrati
 
         // TODO: It should be possibly LDAP_ID (LDAP UUID) used as an externalId inside storageId...
         Assert.assertEquals(storageId.getExternalId(), user.getUsername());
-        Assert.assertNull(user.getFederationLink());
+        Assert.assertNotNull(user.getFederationLink());
     }
 
 
@@ -212,9 +220,6 @@ public class LDAPProvidersIntegrationNoImportTest extends LDAPProvidersIntegrati
 
     @Test
     public void testFullNameMapperWriteOnly() {
-        Assume.assumeTrue("User cache disabled. UserModel behaves differently when it's cached adapter and when not. See https://github.com/keycloak/keycloak/discussions/10004", 
-                isUserCacheEnabled());
-
         ComponentRepresentation firstNameMapperRep = testingClient.server().fetch(session -> {
             LDAPTestContext ctx = LDAPTestContext.init(session);
             RealmModel appRealm = ctx.getRealm();

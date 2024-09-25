@@ -1,6 +1,7 @@
-export default interface UserProfileConfig {
+export interface UserProfileConfig {
   attributes?: UserProfileAttribute[];
   groups?: UserProfileGroup[];
+  unmanagedAttributePolicy?: UnmanagedAttributePolicy;
 }
 export interface UserProfileAttribute {
   name?: string;
@@ -13,6 +14,7 @@ export interface UserProfileAttribute {
   selector?: UserProfileAttributeSelector;
   displayName?: string;
   group?: string;
+  multivalued?: boolean;
 }
 export interface UserProfileAttributeRequired {
   roles?: string[];
@@ -40,6 +42,7 @@ export interface UserProfileAttributeMetadata {
   group?: string;
   annotations?: Record<string, unknown>;
   validators?: Record<string, Record<string, unknown>>;
+  multivalued?: boolean;
 }
 
 export interface UserProfileAttributeGroupMetadata {
@@ -52,4 +55,11 @@ export interface UserProfileAttributeGroupMetadata {
 export interface UserProfileMetadata {
   attributes?: UserProfileAttributeMetadata[];
   groups?: UserProfileAttributeGroupMetadata[];
+}
+
+export enum UnmanagedAttributePolicy {
+  Disabled = "DISABLED",
+  Enabled = "ENABLED",
+  AdminView = "ADMIN_VIEW",
+  AdminEdit = "ADMIN_EDIT",
 }

@@ -18,6 +18,7 @@
 package org.keycloak.config.database;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -49,6 +50,12 @@ public final class Database {
         }
 
         return false;
+    }
+
+    public static Optional<Vendor> getVendor(String vendor) {
+        return Arrays.stream(Vendor.values())
+                .filter(v -> v.isOfKind(vendor) || asList(v.aliases).contains(vendor))
+                .findAny();
     }
 
     public static Optional<String> getDatabaseKind(String alias) {
@@ -116,7 +123,7 @@ public final class Database {
                         if ("dev-file".equalsIgnoreCase(alias)) {
                             return addH2NonKeywords("jdbc:h2:file:${kc.home.dir:${kc.db-url-path:" + escapeReplacements(System.getProperty("user.home")) + "}}" + escapeReplacements(File.separator) + "${kc.data.dir:data}"
                                     + escapeReplacements(File.separator) + "h2" + escapeReplacements(File.separator)
-                                    + "keycloakdb${kc.db-url-properties:;;AUTO_SERVER=TRUE}");
+                                    + "keycloakdb${kc.db-url-properties:}");
                         }
                         return addH2NonKeywords("jdbc:h2:mem:keycloakdb${kc.db-url-properties:}");
                     }

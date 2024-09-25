@@ -1,4 +1,4 @@
-import { createInstance } from "i18next";
+import { LanguageDetectorModule, createInstance } from "i18next";
 import HttpBackend from "i18next-http-backend";
 import { initReactI18next } from "react-i18next";
 
@@ -14,6 +14,14 @@ type KeyValue = { key: string; value: string };
 // that we can have a proper type-safe translation function.
 export type TFuncKey = any;
 
+export const keycloakLanguageDetector: LanguageDetectorModule = {
+  type: "languageDetector",
+
+  detect() {
+    return environment.locale;
+  },
+};
+
 export const i18n = createInstance({
   fallbackLng: DEFAULT_LOCALE,
   interpolation: {
@@ -21,7 +29,7 @@ export const i18n = createInstance({
   },
   backend: {
     loadPath: joinPath(
-      environment.authUrl,
+      environment.serverBaseUrl,
       `resources/${environment.realm}/account/{{lng}}`,
     ),
     parse: (data: string) => {
@@ -35,4 +43,5 @@ export const i18n = createInstance({
 });
 
 i18n.use(HttpBackend);
+i18n.use(keycloakLanguageDetector);
 i18n.use(initReactI18next);

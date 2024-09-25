@@ -1,7 +1,6 @@
 package org.keycloak.testsuite.auth.page.login;
 
 import org.keycloak.authentication.requiredactions.DeleteAccount;
-import org.keycloak.testsuite.auth.page.AuthRealm;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -13,7 +12,7 @@ public class DeleteAccountActionConfirmPage extends RequiredActions {
   @FindBy(css = "button[name='cancel-aia']")
   WebElement cancelActionButton;
 
-  @FindBy(css = "input[type='submit']")
+  @FindBy(css = "button[type='submit']")
   WebElement confirmActionButton;
 
   @Override
@@ -36,7 +35,7 @@ public class DeleteAccountActionConfirmPage extends RequiredActions {
   }
 
   public boolean isErrorMessageDisplayed() {
-    return driver.findElements(By.cssSelector(".alert-error")).size() == 1;
+    return driver.findElements(By.cssSelector(".pf-v5-c-alert")).size() == 1;
   }
 
   public String getErrorMessageText() {

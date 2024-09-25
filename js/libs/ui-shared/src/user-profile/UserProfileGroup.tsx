@@ -1,19 +1,22 @@
 import { UserProfileAttributeMetadata } from "@keycloak/keycloak-admin-client/lib/defs/userProfileMetadata";
 import { FormGroup, InputGroup } from "@patternfly/react-core";
+import { TFunction } from "i18next";
 import { get } from "lodash-es";
 import { PropsWithChildren, ReactNode } from "react";
-import { UseFormReturn } from "react-hook-form";
+import { UseFormReturn, type FieldError } from "react-hook-form";
+
+import { FormErrorText } from "../controls/FormErrorText";
 import { HelpItem } from "../controls/HelpItem";
 import {
-  TranslationFunction,
   UserFormFields,
   fieldName,
   isRequiredAttribute,
+  label,
   labelAttribute,
 } from "./utils";
 
 export type UserProfileGroupProps = {
-  t: TranslationFunction;
+  t: TFunction;
   form: UseFormReturn<UserFormFields>;
   attribute: UserProfileAttributeMetadata;
   renderer?: (attribute: UserProfileAttributeMetadata) => ReactNode;
@@ -26,20 +29,23 @@ export const UserProfileGroup = ({
   renderer,
   children,
 }: PropsWithChildren<UserProfileGroupProps>) => {
-  const helpText = attribute.annotations?.["inputHelperTextBefore"] as string;
+  const helpText = label(
+    t,
+    attribute.annotations?.["inputHelperTextBefore"] as string,
+  );
   const {
     formState: { errors },
   } = form;
 
   const component = renderer?.(attribute);
+  const error = get(errors, fieldName(attribute.name)) as FieldError;
+
   return (
     <FormGroup
       key={attribute.name}
       label={labelAttribute(t, attribute) || ""}
       fieldId={attribute.name}
       isRequired={isRequiredAttribute(attribute)}
-      validated={get(errors, fieldName(attribute.name)) ? "error" : "default"}
-      helperTextInvalid={t(get(errors, fieldName(attribute.name))?.message)}
       labelIcon={
         helpText ? (
           <HelpItem helpText={helpText} fieldLabelId={attribute.name!} />
@@ -53,6 +59,12 @@ export const UserProfileGroup = ({
         </InputGroup>
       ) : (
         children
+      )}
+      {error && (
+        <FormErrorText
+          data-testid={`${attribute.name}-helper`}
+          message={error.message as string}
+        />
       )}
     </FormGroup>
   );

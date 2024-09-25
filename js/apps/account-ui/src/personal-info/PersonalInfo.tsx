@@ -1,21 +1,25 @@
 import {
+  UserProfileFields,
+  beerify,
+  debeerify,
+  setUserProfileServerError,
+  useEnvironment,
+} from "@keycloak/keycloak-ui-shared";
+import {
   ActionGroup,
   Alert,
+  AlertVariant,
   Button,
   ExpandableSection,
   Form,
   Spinner,
 } from "@patternfly/react-core";
 import { ExternalLinkSquareAltIcon } from "@patternfly/react-icons";
-import { useKeycloak } from "keycloak-masthead";
+import { TFunction } from "i18next";
 import { useState } from "react";
 import { ErrorOption, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import {
-  UserProfileFields,
-  setUserProfileServerError,
-  useAlerts,
-} from "ui-shared";
+
 import {
   getPersonalInfo,
   getSupportedLocales,
@@ -26,46 +30,63 @@ import {
   UserRepresentation,
 } from "../api/representations";
 import { Page } from "../components/page/Page";
-import { environment } from "../environment";
-import { TFuncKey } from "../i18n";
+import type { Environment } from "../environment";
+import { TFuncKey, i18n } from "../i18n";
+import { useAccountAlerts } from "../utils/useAccountAlerts";
 import { usePromise } from "../utils/usePromise";
 
-const PersonalInfo = () => {
+export const PersonalInfo = () => {
   const { t } = useTranslation();
-  const keycloak = useKeycloak();
+  const context = useEnvironment<Environment>();
   const [userProfileMetadata, setUserProfileMetadata] =
     useState<UserProfileMetadata>();
   const [supportedLocales, setSupportedLocales] = useState<string[]>([]);
   const form = useForm<UserRepresentation>({ mode: "onChange" });
-  const { handleSubmit, reset, setError } = form;
-  const { addAlert, addError } = useAlerts();
+  const { handleSubmit, reset, setValue, setError } = form;
+  const { addAlert } = useAccountAlerts();
 
   usePromise(
     (signal) =>
       Promise.all([
-        getPersonalInfo({ signal }),
-        getSupportedLocales({ signal }),
+        getPersonalInfo({ signal, context }),
+        getSupportedLocales({ signal, context }),
       ]),
     ([personalInfo, supportedLocales]) => {
       setUserProfileMetadata(personalInfo.userProfileMetadata);
       setSupportedLocales(supportedLocales);
       reset(personalInfo);
+      Object.entries(personalInfo.attributes || {}).forEach(([k, v]) =>
+        setValue(`attributes[${beerify(k)}]`, v),
+      );
     },
   );
 
   const onSubmit = async (user: UserRepresentation) => {
     try {
-      await savePersonalInfo(user);
-      keycloak?.updateToken();
+      const attributes = Object.fromEntries(
+        Object.entries(user.attributes || {}).map(([k, v]) => [
+          debeerify(k),
+          v,
+        ]),
+      );
+      await savePersonalInfo(context, { ...user, attributes });
+      const locale = attributes["locale"]?.toString();
+      if (locale)
+        i18n.changeLanguage(locale, (error) => {
+          if (error) {
+            console.warn("Error(s) loading locale", locale, error);
+          }
+        });
+      context.keycloak.updateToken();
       addAlert(t("accountUpdatedMessage"));
     } catch (error) {
-      addError(t("accountUpdatedError").toString());
+      addAlert(t("accountUpdatedError"), AlertVariant.danger);
 
       setUserProfileServerError(
         { responseData: { errors: error as any } },
         (name: string | number, error: unknown) =>
           setError(name as string, error as ErrorOption),
-        (key: TFuncKey, param?: object) => t(key, { ...param }),
+        ((key: TFuncKey, param?: object) => t(key, param as any)) as TFunction,
       );
     }
   };
@@ -74,12 +95,17 @@ const PersonalInfo = () => {
     return <Spinner />;
   }
 
+  const allFieldsReadOnly = () =>
+    userProfileMetadata?.attributes
+      ?.map((a) => a.readOnly)
+      .reduce((p, c) => p && c, true);
+
   const {
     updateEmailFeatureEnabled,
     updateEmailActionEnabled,
     isRegistrationEmailAsUsername,
     isEditUserNameAllowed,
-  } = environment.features;
+  } = context.environment.features;
   return (
     <Page title={t("personalInfo")} description={t("personalInfoDescription")}>
       <Form isHorizontal onSubmit={handleSubmit(onSubmit)}>
@@ -87,7 +113,11 @@ const PersonalInfo = () => {
           form={form}
           userProfileMetadata={userProfileMetadata}
           supportedLocales={supportedLocales}
-          t={(key: unknown, params) => t(key as TFuncKey, { ...params })}
+          currentLocale={context.environment.locale}
+          t={
+            ((key: unknown, params) =>
+              t(key as TFuncKey, params as any)) as TFunction
+          }
           renderer={(attribute) =>
             attribute.name === "email" &&
             updateEmailFeatureEnabled &&
@@ -97,7 +127,7 @@ const PersonalInfo = () => {
                 id="update-email-btn"
                 variant="link"
                 onClick={() =>
-                  keycloak?.keycloak.login({ action: "UPDATE_EMAIL" })
+                  context.keycloak.login({ action: "UPDATE_EMAIL" })
                 }
                 icon={<ExternalLinkSquareAltIcon />}
                 iconPosition="right"
@@ -107,25 +137,27 @@ const PersonalInfo = () => {
             ) : undefined
           }
         />
-        <ActionGroup>
-          <Button
-            data-testid="save"
-            type="submit"
-            id="save-btn"
-            variant="primary"
-          >
-            {t("save")}
-          </Button>
-          <Button
-            data-testid="cancel"
-            id="cancel-btn"
-            variant="link"
-            onClick={() => reset()}
-          >
-            {t("cancel")}
-          </Button>
-        </ActionGroup>
-        {environment.features.deleteAccountAllowed && (
+        {!allFieldsReadOnly() && (
+          <ActionGroup>
+            <Button
+              data-testid="save"
+              type="submit"
+              id="save-btn"
+              variant="primary"
+            >
+              {t("save")}
+            </Button>
+            <Button
+              data-testid="cancel"
+              id="cancel-btn"
+              variant="link"
+              onClick={() => reset()}
+            >
+              {t("cancel")}
+            </Button>
+          </ActionGroup>
+        )}
+        {context.environment.features.deleteAccountAllowed && (
           <ExpandableSection
             data-testid="delete-account"
             toggleText={t("deleteAccount")}
@@ -139,7 +171,7 @@ const PersonalInfo = () => {
                   id="delete-account-btn"
                   variant="danger"
                   onClick={() =>
-                    keycloak?.keycloak.login({
+                    context.keycloak.login({
                       action: "delete_account",
                     })
                   }

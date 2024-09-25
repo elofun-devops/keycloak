@@ -1,6 +1,12 @@
 import type PolicyProviderRepresentation from "@keycloak/keycloak-admin-client/lib/defs/policyProviderRepresentation";
 import type PolicyRepresentation from "@keycloak/keycloak-admin-client/lib/defs/policyRepresentation";
 import {
+  ListEmptyState,
+  PaginatingTableToolbar,
+  useAlerts,
+  useFetch,
+} from "@keycloak/keycloak-ui-shared";
+import {
   Alert,
   AlertVariant,
   Button,
@@ -10,7 +16,7 @@ import {
 } from "@patternfly/react-core";
 import {
   ExpandableRowContent,
-  TableComposable,
+  Table,
   Tbody,
   Td,
   Th,
@@ -20,16 +26,11 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-
-import { adminClient } from "../../admin-client";
-import { useAlerts } from "../../components/alert/Alerts";
+import { useAdminClient } from "../../admin-client";
 import { useConfirmDialog } from "../../components/confirm-dialog/ConfirmDialog";
-import { KeycloakSpinner } from "../../components/keycloak-spinner/KeycloakSpinner";
-import { ListEmptyState } from "../../components/list-empty-state/ListEmptyState";
-import { PaginatingTableToolbar } from "../../components/table-toolbar/PaginatingTableToolbar";
+import { KeycloakSpinner } from "@keycloak/keycloak-ui-shared";
 import { useRealm } from "../../context/realm-context/RealmContext";
 import { toUpperCase } from "../../util";
-import { useFetch } from "../../utils/useFetch";
 import useToggle from "../../utils/useToggle";
 import { toCreatePolicy } from "../routes/NewPolicy";
 import { toPermissionDetails } from "../routes/PermissionDetails";
@@ -41,6 +42,7 @@ import { SearchDropdown, SearchForm } from "./SearchDropdown";
 
 type PoliciesProps = {
   clientId: string;
+  isDisabled?: boolean;
 };
 
 type ExpandablePolicyRepresentation = PolicyRepresentation & {
@@ -61,7 +63,12 @@ const DependentPoliciesRenderer = ({
   );
 };
 
-export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
+export const AuthorizationPolicies = ({
+  clientId,
+  isDisabled = false,
+}: PoliciesProps) => {
+  const { adminClient } = useAdminClient();
+
   const { t } = useTranslation();
   const { addAlert, addError } = useAlerts();
   const { realm } = useRealm();
@@ -130,11 +137,11 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
               isPlain
               component="p"
               title={t("deletePolicyWarning")}
-              className="pf-u-pt-lg"
+              className="pf-v5-u-pt-lg"
             >
-              <p className="pf-u-pt-xs">
+              <p className="pf-v5-u-pt-xs">
                 {selectedPolicy.dependentPolicies.map((policy) => (
-                  <strong key={policy.id} className="pf-u-pr-md">
+                  <strong key={policy.id} className="pf-v5-u-pr-md">
                     {policy.name}
                   </strong>
                 ))}
@@ -165,7 +172,7 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
   const noData = policies.length === 0;
   const searching = Object.keys(search).length !== 0;
   return (
-    <PageSection variant="light" className="pf-u-p-0">
+    <PageSection variant="light" className="pf-v5-u-p-0">
       <DeleteConfirm />
       {(!noData || searching) && (
         <>
@@ -198,10 +205,15 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
                     types={policyProviders}
                     search={search}
                     onSearch={setSearch}
+                    type="policy"
                   />
                 </ToolbarItem>
                 <ToolbarItem>
-                  <Button data-testid="createPolicy" onClick={toggleDialog}>
+                  <Button
+                    data-testid="createPolicy"
+                    onClick={toggleDialog}
+                    isDisabled={isDisabled}
+                  >
                     {t("createPolicy")}
                   </Button>
                 </ToolbarItem>
@@ -209,7 +221,7 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
             }
           >
             {!noData && (
-              <TableComposable aria-label={t("resources")} variant="compact">
+              <Table aria-label={t("resources")} variant="compact">
                 <Thead>
                   <Tr>
                     <Th aria-hidden="true" />
@@ -254,26 +266,28 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
                         <DependentPoliciesRenderer row={policy} />
                       </Td>
                       <Td>{policy.description}</Td>
-                      <Td
-                        actions={{
-                          items: [
-                            {
-                              title: t("delete"),
-                              onClick: async () => {
-                                setSelectedPolicy(policy);
-                                toggleDeleteDialog();
+                      {!isDisabled && (
+                        <Td
+                          actions={{
+                            items: [
+                              {
+                                title: t("delete"),
+                                onClick: () => {
+                                  setSelectedPolicy(policy);
+                                  toggleDeleteDialog();
+                                },
                               },
-                            },
-                          ],
-                        }}
-                      />
+                            ],
+                          }}
+                        />
+                      )}
                     </Tr>
                     <Tr
                       key={`child-${policy.id}`}
                       isExpanded={policy.isExpanded}
                     >
                       <Td />
-                      <Td colSpan={4}>
+                      <Td colSpan={3 + (isDisabled ? 0 : 1)}>
                         <ExpandableRowContent>
                           {policy.isExpanded && (
                             <DescriptionList
@@ -300,7 +314,7 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
                     </Tr>
                   </Tbody>
                 ))}
-              </TableComposable>
+              </Table>
             )}
           </PaginatingTableToolbar>
         </>
@@ -308,6 +322,7 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
       {noData && searching && (
         <ListEmptyState
           isSearchVariant
+          isDisabled={isDisabled}
           message={t("noSearchResults")}
           instructions={t("noSearchResultsInstructions")}
         />
@@ -330,6 +345,7 @@ export const AuthorizationPolicies = ({ clientId }: PoliciesProps) => {
           <ListEmptyState
             message={t("emptyPolicies")}
             instructions={t("emptyPoliciesInstructions")}
+            isDisabled={isDisabled}
             primaryActionText={t("createPolicy")}
             onPrimaryAction={toggleDialog}
           />

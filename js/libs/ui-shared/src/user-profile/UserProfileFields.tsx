@@ -4,8 +4,10 @@ import {
   UserProfileMetadata,
 } from "@keycloak/keycloak-admin-client/lib/defs/userProfileMetadata";
 import { Text } from "@patternfly/react-core";
-import { ReactNode, useMemo } from "react";
+import { TFunction } from "i18next";
+import { ReactNode, useMemo, type JSX } from "react";
 import { FieldPath, UseFormReturn } from "react-hook-form";
+
 import { ScrollForm } from "../main";
 import { LocaleSelector } from "./LocaleSelector";
 import { MultiInputComponent } from "./MultiInputComponent";
@@ -13,13 +15,7 @@ import { OptionComponent } from "./OptionsComponent";
 import { SelectComponent } from "./SelectComponent";
 import { TextAreaComponent } from "./TextAreaComponent";
 import { TextComponent } from "./TextComponent";
-import {
-  TranslationFunction,
-  UserFormFields,
-  fieldName,
-  isRootAttribute,
-  label,
-} from "./utils";
+import { UserFormFields, fieldName, isRootAttribute, label } from "./utils";
 
 export type UserProfileError = {
   responseData: { errors?: { errorMessage: string }[] };
@@ -29,34 +25,33 @@ export type Options = {
   options?: string[];
 };
 
-const INPUT_TYPES = [
-  "text",
-  "textarea",
-  "select",
-  "select-radiobuttons",
-  "multiselect",
-  "multiselect-checkboxes",
-  "html5-email",
-  "html5-tel",
-  "html5-url",
-  "html5-number",
-  "html5-range",
-  "html5-datetime-local",
-  "html5-date",
-  "html5-month",
-  "html5-time",
-  "multi-input",
-] as const;
-
-export type InputType = (typeof INPUT_TYPES)[number];
+export type InputType =
+  | "text"
+  | "textarea"
+  | "select"
+  | "select-radiobuttons"
+  | "multiselect"
+  | "multiselect-checkboxes"
+  | "html5-email"
+  | "html5-tel"
+  | "html5-url"
+  | "html5-number"
+  | "html5-range"
+  | "html5-datetime-local"
+  | "html5-date"
+  | "html5-month"
+  | "html5-time"
+  | "multi-input";
 
 export type UserProfileFieldProps = {
-  t: TranslationFunction;
+  t: TFunction;
   form: UseFormReturn<UserFormFields>;
   inputType: InputType;
   attribute: UserProfileAttributeMetadata;
   renderer?: (attribute: UserProfileAttributeMetadata) => ReactNode;
 };
+
+export type OptionLabel = Record<string, string> | undefined;
 
 export const FIELDS: {
   [type in InputType]: (props: UserProfileFieldProps) => JSX.Element;
@@ -80,10 +75,11 @@ export const FIELDS: {
 } as const;
 
 export type UserProfileFieldsProps = {
-  t: TranslationFunction;
+  t: TFunction;
   form: UseFormReturn<UserFormFields>;
   userProfileMetadata: UserProfileMetadata;
   supportedLocales: string[];
+  currentLocale: string;
   hideReadOnly?: boolean;
   renderer?: (
     attribute: UserProfileAttributeMetadata,
@@ -100,6 +96,7 @@ export const UserProfileFields = ({
   form,
   userProfileMetadata,
   supportedLocales,
+  currentLocale,
   hideReadOnly = false,
   renderer,
 }: UserProfileFieldsProps) => {
@@ -143,9 +140,9 @@ export const UserProfileFields = ({
         .map(({ group, attributes }) => ({
           title: label(t, group.displayHeader, group.name) || t("general"),
           panel: (
-            <div className="pf-c-form">
+            <div className="pf-v5-c-form">
               {group.displayDescription && (
-                <Text className="pf-u-pb-lg">
+                <Text className="pf-v5-u-pb-lg">
                   {label(t, group.displayDescription, "")}
                 </Text>
               )}
@@ -155,6 +152,7 @@ export const UserProfileFields = ({
                   t={t}
                   form={form}
                   supportedLocales={supportedLocales}
+                  currentLocale={currentLocale}
                   renderer={renderer}
                   attribute={attribute}
                 />
@@ -167,9 +165,10 @@ export const UserProfileFields = ({
 };
 
 type FormFieldProps = {
-  t: TranslationFunction;
+  t: TFunction;
   form: UseFormReturn<UserFormFields>;
   supportedLocales: string[];
+  currentLocale: string;
   attribute: UserProfileAttributeMetadata;
   renderer?: (
     attribute: UserProfileAttributeMetadata,
@@ -181,22 +180,26 @@ const FormField = ({
   form,
   renderer,
   supportedLocales,
+  currentLocale,
   attribute,
 }: FormFieldProps) => {
   const value = form.watch(
     fieldName(attribute.name) as FieldPath<UserFormFields>,
   );
-  const inputType = useMemo(
-    () => determineInputType(attribute, value),
-    [attribute],
-  );
-  const Component = FIELDS[inputType];
+  const inputType = useMemo(() => determineInputType(attribute), [attribute]);
+
+  const Component =
+    attribute.multivalued ||
+    (isMultiValue(value) && attribute.annotations?.inputType === undefined)
+      ? FIELDS["multi-input"]
+      : FIELDS[inputType];
 
   if (attribute.name === "locale")
     return (
       <LocaleSelector
         form={form}
         supportedLocales={supportedLocales}
+        currentLocale={currentLocale}
         t={t}
         attribute={attribute}
       />
@@ -216,7 +219,6 @@ const DEFAULT_INPUT_TYPE = "text" satisfies InputType;
 
 function determineInputType(
   attribute: UserProfileAttributeMetadata,
-  value: string | string[],
 ): InputType {
   // Always treat the root attributes as a text field.
   if (isRootAttribute(attribute.name)) {
@@ -228,11 +230,6 @@ function determineInputType(
   // if we have an valid input type use that to render
   if (isValidInputType(inputType)) {
     return inputType;
-  }
-
-  // If the attribute has no valid input type and it's multi value use "multi-input"
-  if (isMultiValue(value)) {
-    return "multi-input";
   }
 
   // In all other cases use the default
