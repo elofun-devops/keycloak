@@ -17,6 +17,8 @@
 
 package org.keycloak.it.cli.dist;
 
+import java.nio.file.Paths;
+
 import io.quarkus.test.junit.main.Launch;
 import io.quarkus.test.junit.main.LaunchResult;
 import org.junit.jupiter.api.Assertions;
@@ -30,9 +32,8 @@ import org.keycloak.it.junit5.extension.RawDistOnly;
 import org.keycloak.it.junit5.extension.WithEnvVars;
 import org.keycloak.it.utils.KeycloakDistribution;
 
-import java.nio.file.Paths;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.keycloak.quarkus.runtime.cli.command.Main.CONFIG_FILE_LONG_NAME;
 
 @DistributionTest
@@ -96,17 +97,24 @@ public class OptionsDistTest {
         result.assertMessage("- log-syslog-app-name: Available only when Syslog is activated.");
     }
 
+    @Test
+    @Order(7)
+    @Launch({"start", "--cache-embedded-mtls-enabled=true", "--http-enabled=true", "--hostname-strict=false"})
+    public void testCacheEmbeddedMtlsEnabled(LaunchResult result) {
+        assertTrue(result.getOutputStream().stream().anyMatch(s -> s.contains("Property cache-embedded-mtls-key-store-file required but not specified")));
+    }
+
     // Start-dev should be executed as last tests - build is done for development mode
 
     @Test
-    @Order(7)
+    @Order(8)
     @Launch({"start-dev", "--test=invalid"})
     public void testServerDoesNotStartIfValidationFailDuringReAugStartDev(LaunchResult result) {
         assertEquals(1, result.getErrorStream().stream().filter(s -> s.contains("Unknown option: '--test'")).count());
     }
 
     @Test
-    @Order(8)
+    @Order(9)
     @Launch({"start-dev", "--log=console", "--log-file-output=json"})
     public void testServerDoesNotStartDevIfDisabledFileLogOption(LaunchResult result) {
         assertEquals(1, result.getErrorStream().stream().filter(s -> s.contains("Disabled option: '--log-file-output'. Available only when File log handler is activated")).count());
@@ -114,11 +122,75 @@ public class OptionsDistTest {
     }
 
     @Test
-    @Order(9)
+    @Order(10)
     @Launch({"start-dev", "--log=file", "--log-file-output=json", "--log-console-color=true"})
     public void testServerStartDevIfEnabledFileLogOption(LaunchResult result) {
         assertEquals(0, result.getErrorStream().stream().filter(s -> s.contains("Disabled option: '--log-file-output'. Available only when File log handler is activated")).count());
         assertEquals(1, result.getErrorStream().stream().filter(s -> s.contains("Disabled option: '--log-console-color'. Available only when Console log handler is activated")).count());
         assertEquals(1, result.getErrorStream().stream().filter(s -> s.contains("Possible solutions: --log, --log-file, --log-file-level, --log-file-format, --log-file-output, --log-level")).count());
+    }
+
+    @Test
+    @Order(10)
+    @Launch({"start-dev", "--cache-remote-host=localhost"})
+    public void testCacheRemoteHostWithoutMultiSite(LaunchResult result) {
+        assertErrorStreamContains(result, "cache-remote-host available only when feature 'multi-site', 'clusterless' or 'cache-embedded-remote-store' is set");
+    }
+
+    @Test
+    @Order(11)
+    @Launch({"start-dev", "--cache-remote-port=11222"})
+    public void testCacheRemotePortWithoutCacheRemoteHost(LaunchResult result) {
+        assertDisabledDueToMissingRemoteHost(result, "--cache-remote-port");
+    }
+
+    @Test
+    @Order(12)
+    @Launch({"start-dev", "--cache-remote-username=user"})
+    public void testCacheRemoteUsernameWithoutCacheRemoteHost(LaunchResult result) {
+        assertDisabledDueToMissingRemoteHost(result, "--cache-remote-username");
+    }
+
+    @Test
+    @Order(13)
+    @Launch({"start-dev", "--cache-remote-password=pass"})
+    public void testCacheRemotePasswordWithoutCacheRemoteHost(LaunchResult result) {
+        assertDisabledDueToMissingRemoteHost(result, "--cache-remote-password");
+    }
+
+    @Test
+    @Order(14)
+    @Launch({"start-dev", "--cache-remote-tls-enabled=false"})
+    public void testCacheRemoteTlsEnabledWithoutCacheRemoteHost(LaunchResult result) {
+        assertDisabledDueToMissingRemoteHost(result, "--cache-remote-tls-enabled");
+    }
+
+    @Test
+    @Order(15)
+    @Launch({"start-dev", "--features=multi-site"})
+    public void testMultiSiteWithoutCacheRemoteHost(LaunchResult result) {
+        assertErrorStreamContains(result, "- cache-remote-host: Required when feature 'multi-site' or 'clusterless' is set.");
+    }
+
+    @Test
+    @Order(16)
+    @Launch({"start-dev", "--features=multi-site", "--cache-remote-host=localhost", "--cache-remote-username=user"})
+    public void testCacheRemoteUsernameWithoutCacheRemotePassword(LaunchResult result) {
+        assertErrorStreamContains(result, "The option 'cache-remote-password' is required when 'cache-remote-username' is set.");
+    }
+
+    @Test
+    @Order(17)
+    @Launch({"start-dev", "--features=multi-site", "--cache-remote-host=localhost", "--cache-remote-password=secret"})
+    public void testCacheRemotePasswordWithoutCacheRemoteUsername(LaunchResult result) {
+        assertErrorStreamContains(result, "The option 'cache-remote-username' is required when 'cache-remote-password' is set.");
+    }
+
+    private static void assertDisabledDueToMissingRemoteHost(LaunchResult result, String option) {
+        assertErrorStreamContains(result, "Disabled option: '%s'. Available only when remote host is set".formatted(option));
+    }
+
+    private static void assertErrorStreamContains(LaunchResult result, String msg) {
+        assertTrue(result.getErrorStream().stream().anyMatch(s -> s.contains(msg)));
     }
 }

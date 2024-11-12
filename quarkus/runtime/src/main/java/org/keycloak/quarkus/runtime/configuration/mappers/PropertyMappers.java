@@ -13,7 +13,6 @@ import org.keycloak.quarkus.runtime.cli.PropertyException;
 import org.keycloak.quarkus.runtime.cli.command.AbstractCommand;
 import org.keycloak.quarkus.runtime.cli.command.Build;
 import org.keycloak.quarkus.runtime.cli.command.ShowConfig;
-import org.keycloak.quarkus.runtime.configuration.ConfigArgsConfigSource;
 import org.keycloak.quarkus.runtime.configuration.DisabledMappersInterceptor;
 import org.keycloak.quarkus.runtime.configuration.PersistedConfigSource;
 
@@ -37,14 +36,20 @@ import static org.keycloak.quarkus.runtime.Environment.isRebuildCheck;
 import static org.keycloak.quarkus.runtime.configuration.KeycloakConfigSourceProvider.isKeyStoreConfigSource;
 
 public final class PropertyMappers {
-
+    
+    public static final String KC_SPI_PREFIX = "kc.spi";
     public static String VALUE_MASK = "*******";
-    private static final MappersConfig MAPPERS = new MappersConfig();
+    private static MappersConfig MAPPERS;
     private static final Logger log = Logger.getLogger(PropertyMappers.class);
 
     private PropertyMappers(){}
-
+    
     static {
+        reset();
+    }
+
+    public static void reset() {
+        MAPPERS = new MappersConfig();
         MAPPERS.addAll(CachingPropertyMappers.getClusteringPropertyMappers());
         MAPPERS.addAll(DatabasePropertyMappers.getDatabasePropertyMappers());
         MAPPERS.addAll(HostnameV2PropertyMappers.getHostnamePropertyMappers());
@@ -53,6 +58,7 @@ public final class PropertyMappers {
         MAPPERS.addAll(ConfigKeystorePropertyMappers.getConfigKeystorePropertyMappers());
         MAPPERS.addAll(ManagementPropertyMappers.getManagementPropertyMappers());
         MAPPERS.addAll(MetricsPropertyMappers.getMetricsPropertyMappers());
+        MAPPERS.addAll(EventPropertyMappers.getMetricsPropertyMappers());
         MAPPERS.addAll(ProxyPropertyMappers.getProxyPropertyMappers());
         MAPPERS.addAll(VaultPropertyMappers.getVaultPropertyMappers());
         MAPPERS.addAll(FeaturePropertyMappers.getMappers());
@@ -71,31 +77,8 @@ public final class PropertyMappers {
         return getMapperOrDefault(name, PropertyMapper.IDENTITY).getConfigValue(name, context);
     }
 
-    public static boolean isBuildTimeProperty(String name) {
-        if (isFeaturesBuildTimeProperty(name) || isSpiBuildTimeProperty(name)) {
-            return true;
-        }
-
-        final PropertyMapper<?> mapper = getMapperOrDefault(name, null);
-        boolean isBuildTimeProperty = mapper == null ? false : mapper.isBuildTime();
-
-        return isBuildTimeProperty
-                && !"kc.version".equals(name)
-                && !ConfigArgsConfigSource.CLI_ARGS.equals(name)
-                && !"kc.home.dir".equals(name)
-                && !"kc.config.file".equals(name)
-                && !org.keycloak.common.util.Environment.PROFILE.equals(name)
-                && !"kc.show.config".equals(name)
-                && !"kc.show.config.runtime".equals(name)
-                && !"kc.config-file".equals(name);
-    }
-
-    private static boolean isSpiBuildTimeProperty(String name) {
-        return name.startsWith("kc.spi") && (name.endsWith("provider") || name.endsWith("enabled"));
-    }
-
-    private static boolean isFeaturesBuildTimeProperty(String name) {
-        return name.startsWith("kc.features");
+    public static boolean isSpiBuildTimeProperty(String name) {
+        return name.startsWith(KC_SPI_PREFIX) && (name.endsWith("-provider") || name.endsWith("-enabled") || name.endsWith("-provider-default"));
     }
 
     public static Map<OptionCategory, List<PropertyMapper<?>>> getRuntimeMappers() {

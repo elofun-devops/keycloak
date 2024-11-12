@@ -84,6 +84,7 @@ public class ModelToRepresentation {
         REALM_EXCLUDED_ATTRIBUTES.add("bruteForceProtected");
         REALM_EXCLUDED_ATTRIBUTES.add("permanentLockout");
         REALM_EXCLUDED_ATTRIBUTES.add("maxTemporaryLockouts");
+        REALM_EXCLUDED_ATTRIBUTES.add("bruteForceStrategy");
         REALM_EXCLUDED_ATTRIBUTES.add("maxFailureWaitSeconds");
         REALM_EXCLUDED_ATTRIBUTES.add("waitIncrementSeconds");
         REALM_EXCLUDED_ATTRIBUTES.add("quickLoginCheckMilliSeconds");
@@ -307,6 +308,7 @@ public class ModelToRepresentation {
         rep.setResourcePath(adminEvent.getResourcePath());
         rep.setRepresentation(adminEvent.getRepresentation());
         rep.setError(adminEvent.getError());
+        rep.setDetails(adminEvent.getDetails());
 
         return rep;
     }
@@ -372,6 +374,7 @@ public class ModelToRepresentation {
         rep.setBruteForceProtected(realm.isBruteForceProtected());
         rep.setPermanentLockout(realm.isPermanentLockout());
         rep.setMaxTemporaryLockouts(realm.getMaxTemporaryLockouts());
+        rep.setBruteForceStrategy(realm.getBruteForceStrategy());
         rep.setMaxFailureWaitSeconds(realm.getMaxFailureWaitSeconds());
         rep.setMinimumQuickLoginWaitSeconds(realm.getMinimumQuickLoginWaitSeconds());
         rep.setWaitIncrementSeconds(realm.getWaitIncrementSeconds());
@@ -402,6 +405,7 @@ public class ModelToRepresentation {
         rep.setResetPasswordAllowed(realm.isResetPasswordAllowed());
         rep.setEditUsernameAllowed(realm.isEditUsernameAllowed());
         rep.setOrganizationsEnabled(realm.isOrganizationsEnabled());
+        rep.setVerifiableCredentialsEnabled(realm.isVerifiableCredentialsEnabled());
         rep.setDefaultSignatureAlgorithm(realm.getDefaultSignatureAlgorithm());
         rep.setRevokeRefreshToken(realm.isRevokeRefreshToken());
         rep.setRefreshTokenMaxReuse(realm.getRefreshTokenMaxReuse());
@@ -1290,5 +1294,37 @@ public class ModelToRepresentation {
         RequiredActionConfigRepresentation rep = new RequiredActionConfigRepresentation();
         rep.setConfig(model.getConfig());
         return rep;
+    }
+
+    public static OrganizationRepresentation toRepresentation(OrganizationModel model) {
+        OrganizationRepresentation rep = toBriefRepresentation(model);
+        if (rep == null) {
+            return null;
+        }
+        rep.setAttributes(model.getAttributes());
+        return rep;
+    }
+
+    public static OrganizationRepresentation toBriefRepresentation(OrganizationModel model) {
+        if (model == null) {
+            return null;
+        }
+        OrganizationRepresentation rep = new OrganizationRepresentation();
+        rep.setId(model.getId());
+        rep.setName(model.getName());
+        rep.setAlias(model.getAlias());
+        rep.setEnabled(model.isEnabled());
+        rep.setRedirectUrl(model.getRedirectUrl());
+        rep.setDescription(model.getDescription());
+        model.getDomains().filter(Objects::nonNull).map(ModelToRepresentation::toRepresentation)
+                .forEach(rep::addDomain);
+        return rep;
+    }
+
+    public static OrganizationDomainRepresentation toRepresentation(OrganizationDomainModel model) {
+        OrganizationDomainRepresentation representation = new OrganizationDomainRepresentation();
+        representation.setName(model.getName());
+        representation.setVerified(model.isVerified());
+        return representation;
     }
 }

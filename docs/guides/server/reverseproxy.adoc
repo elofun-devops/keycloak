@@ -6,9 +6,23 @@
 <@tmpl.guide
 title="Using a reverse proxy"
 summary="Learn how to configure {project_name} together with a reverse proxy, api gateway, or load balancer."
-includedOptions="proxy proxy-* hostname-path hostname-url http-relative-path">
+includedOptions="proxy-* hostname hostname-admin http-relative-path">
 
 Distributed environments frequently require the use of a reverse proxy. {project_name} offers several options to securely integrate with such environments.
+
+== Port to be proxied
+
+{project_name} runs on the following ports by default:
+
+* `8443` (`8080` when you enable HTTP explicitly by `--http-enabled=true`)
+
+* `9000`
+
+The port `8443` (or `8080` if HTTP is enabled) is used for the Admin UI, Account Console, SAML and OIDC endpoints and the Admin REST API as described in the <@links.server id="hostname"/> {section}.
+
+The port `9000` is used for management, which includes endpoints for health checks and metrics as described in the  <@links.server id="management-interface"/> {section}.
+
+You only need to proxy port `8443` (or `8080`) even when you use different host names for frontend/backend and administration as described at <@links.server id="configure-production"/>. You should not proxy port `9000` as health checks and metrics use those ports directly, and you do not want to expose this information to external callers.
 
 == Configure the reverse proxy headers
 
@@ -18,7 +32,7 @@ Distributed environments frequently require the use of a reverse proxy. {project
 * `forwarded` enables parsing of the `Forwarded` header as per https://www.rfc-editor.org/rfc/rfc7239.html[RFC7239].
 * `xforwarded` enables parsing of non-standard `X-Forwarded-*` headers, such as `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, and `X-Forwarded-Port`.
 
-NOTE: If you are using a reverse proxy and do not set the `proxy-headers` option, then by default you will see 403 Forbidden responses to requests via the proxy that perform origin checking.
+NOTE: If you are using a reverse proxy for anything other than https passthrough and do not set the `proxy-headers` option, then by default you will see 403 Forbidden responses to requests via the proxy that perform origin checking.
 
 For example:
 
@@ -79,7 +93,8 @@ By default, the `spi-sticky-session-encoder-infinispan-should-attach-route` opti
 cookies to indicate to the reverse proxy the node that subsequent requests should be sent to.
 
 == Exposed path recommendations
-When using a reverse proxy, {project_name} only requires certain paths need to be exposed.
+
+When using a reverse proxy, {project_name} only requires certain paths to be exposed.
 The following table shows the recommended paths to expose.
 
 [%autowidth]
@@ -106,11 +121,6 @@ The following table shows the recommended paths to expose.
 |Yes
 |This path is needed to serve assets correctly. It may be served from a CDN instead of the {project_name} path.
 
-|/robots.txt
-|/robots.txt
-|Yes
-|Search engine rules
-
 |/metrics
 |-
 |No
@@ -132,7 +142,17 @@ To ensure that proxy headers are used only from proxies you trust, set the `prox
 
 For example:
 
-<@kc.start parameters="--proxy-headers forwarded --proxy-trusted-addresses=192.168.0.32,127.0.0.0/8"/> 
+<@kc.start parameters="--proxy-headers forwarded --proxy-trusted-addresses=192.168.0.32,127.0.0.0/8"/>
+
+== PROXY Protocol
+
+The `proxy-protocol-enabled` option controls whether the server should use the HA PROXY protocol when serving requests from behind a proxy. When set to true, the remote address returned will be the one from the actual connecting client.
+
+This is useful when running behind a compatible https passthrough proxy because the request headers cannot be manipulated.
+
+For example:
+
+<@kc.start parameters="--proxy-protocol-enabled true"/>
 
 == Enabling client certificate lookup
 

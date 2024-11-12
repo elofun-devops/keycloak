@@ -47,6 +47,7 @@ import org.keycloak.models.WebAuthnPolicy;
 import org.keycloak.models.cache.CachedRealmModel;
 import org.keycloak.models.cache.UserCache;
 import org.keycloak.models.cache.infinispan.entities.CachedRealm;
+import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.UserStorageUtil;
 import org.keycloak.storage.client.ClientStorageProvider;
@@ -281,6 +282,18 @@ public class RealmAdapter implements CachedRealmModel {
     public void setMaxTemporaryLockouts(final int val) {
         getDelegateForUpdate();
         updated.setMaxTemporaryLockouts(val);
+    }
+
+    @Override
+    public RealmRepresentation.BruteForceStrategy getBruteForceStrategy() {
+        if(isUpdated()) return updated.getBruteForceStrategy();
+        return cached.getBruteForceStrategy();
+    }
+
+    @Override
+    public void setBruteForceStrategy(final RealmRepresentation.BruteForceStrategy val) {
+        getDelegateForUpdate();
+        updated.setBruteForceStrategy(val);
     }
 
     @Override
@@ -1808,8 +1821,25 @@ public class RealmAdapter implements CachedRealmModel {
         updated.setOrganizationsEnabled(organizationsEnabled);
     }
 
+    @Override
+    public boolean isVerifiableCredentialsEnabled() {
+        if (isUpdated()) return featureVerifiableCredentialsEnabled(updated.isVerifiableCredentialsEnabled());
+        return featureVerifiableCredentialsEnabled(cached.isVerifiableCredentialsEnabled());
+    }
+
+    @Override
+    public void setVerifiableCredentialsEnabled(boolean verifiableCredentialsEnabled) {
+        getDelegateForUpdate();
+        updated.setVerifiableCredentialsEnabled(verifiableCredentialsEnabled);
+    }
+
     private boolean featureAwareIsOrganizationsEnabled(boolean isOrganizationsEnabled) {
         if (!Profile.isFeatureEnabled(Profile.Feature.ORGANIZATION)) return false;
         return isOrganizationsEnabled;
+    }
+
+    private boolean featureVerifiableCredentialsEnabled(boolean isVerifiableCredentialsEnabled) {
+        if (!Profile.isFeatureEnabled(Profile.Feature.OID4VC_VCI)) return false;
+        return isVerifiableCredentialsEnabled;
     }
 }

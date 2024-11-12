@@ -51,17 +51,19 @@ public class Profile {
 
         ACCOUNT_API("Account Management REST API", Type.DEFAULT),
 
-        ACCOUNT3("Account Console version 3", Type.DEFAULT, Feature.ACCOUNT_API),
+        ACCOUNT_V3("Account Console version 3", Type.DEFAULT, 3, Feature.ACCOUNT_API),
 
-        ADMIN_FINE_GRAINED_AUTHZ("Fine-Grained Admin Permissions", Type.PREVIEW),
+        ADMIN_FINE_GRAINED_AUTHZ("Fine-Grained Admin Permissions", Type.PREVIEW, 1),
+
+        ADMIN_FINE_GRAINED_AUTHZ_V2("Fine-Grained Admin Permissions version 2", Type.EXPERIMENTAL, 2, Feature.AUTHORIZATION),
 
         ADMIN_API("Admin API", Type.DEFAULT),
 
-        ADMIN2("New Admin Console", Type.DEFAULT, Feature.ADMIN_API),
+        ADMIN_V2("New Admin Console", Type.DEFAULT, 2, Feature.ADMIN_API),
 
-        LOGIN2("New Login Theme", Type.DEFAULT),
+        LOGIN_V2("New Login Theme", Type.DEFAULT, 2),
 
-        LOGIN1("Legacy Login Theme", Type.DEPRECATED),
+        LOGIN_V1("Legacy Login Theme", Type.DEPRECATED, 1),
 
         DOCKER("Docker Registry protocol", Type.DISABLED_BY_DEFAULT),
 
@@ -121,6 +123,8 @@ public class Profile {
         PASSKEYS("Passkeys", Type.PREVIEW),
 
         CACHE_EMBEDDED_REMOTE_STORE("Support for remote-store in embedded Infinispan caches", Type.EXPERIMENTAL),
+
+        USER_EVENT_METRICS("Collect metrics based on user events", Type.PREVIEW),
         ;
 
         private final Type type;
@@ -140,9 +144,6 @@ public class Profile {
             this(label, type, version, null, dependencies);
         }
 
-        /**
-         * allowNameKey should be false for new versioned features to disallow using a legacy name, like account2
-         */
         Feature(String label, Type type, int version, BooleanSupplier isAvailable, Feature... dependencies) {
             this.label = label;
             this.type = type;
@@ -161,8 +162,7 @@ public class Profile {
         }
 
         /**
-         * Get the key that uniquely identifies this feature, may be used by users if
-         * allowNameKey is true.
+         * Get the key that uniquely identifies this feature
          * <p>
          * {@link #getVersionedKey()} should instead be shown to users where possible.
          */
@@ -339,13 +339,13 @@ public class Profile {
      */
     private static Map<String, TreeSet<Feature>> getOrderedFeatures() {
         if (FEATURES == null) {
-            // "natural" ordering low to high between two features
-            Comparator<Feature> comparator = Comparator.comparing(Feature::getType).thenComparingInt(Feature::getVersion);
+            // "natural" ordering low to high between two features (type has precedence and then reversed version is used)
+            Comparator<Feature> comparator = Comparator.comparing(Feature::getType).thenComparing(Comparator.comparingInt(Feature::getVersion).reversed());
             // aggregate the features by unversioned key
             HashMap<String, TreeSet<Feature>> features = new HashMap<>();
             Stream.of(Feature.values()).forEach(f -> features.compute(f.getUnversionedKey(), (k, v) -> {
                 if (v == null) {
-                    v = new TreeSet<>(comparator.reversed()); // we want the highest priority first
+                    v = new TreeSet<>(comparator);
                 }
                 v.add(f);
                 return v;

@@ -28,7 +28,9 @@ import org.keycloak.it.junit5.extension.CLIResult;
 import org.keycloak.it.junit5.extension.DistributionTest;
 import org.keycloak.it.junit5.extension.RawDistOnly;
 import org.keycloak.it.utils.KeycloakDistribution;
+import org.keycloak.it.utils.RawKeycloakDistribution;
 
+import java.io.File;
 import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -53,11 +55,12 @@ public class StartDevCommandDistTest {
     }
 
     @Test
-    @Launch({ "start-dev", "--debug" })
+    @Launch({ "start-dev", "--debug", "--features=passkeys:v1" })
     void testStartDevShouldStartTwoJVMs(LaunchResult result) {
         CLIResult cliResult = (CLIResult) result;
         cliResult.assertMessageWasShownExactlyNumberOfTimes("Listening for transport dt_socket at address:", 2);
         cliResult.assertStartedDevMode();
+        cliResult.assertMessage("passkeys");
     }
 
     @Test
@@ -84,6 +87,19 @@ public class StartDevCommandDistTest {
         assertTrue(cliResult.getOutput().contains("DEBUG [org.keycloak"));
         assertTrue(cliResult.getOutput().contains("Listening on:"));
         cliResult.assertStartedDevMode();
+    }
+    
+    @Test
+    void testStartDevThenImportRebuild(KeycloakDistribution dist) throws Exception {
+        RawKeycloakDistribution rawDist = dist.unwrap(RawKeycloakDistribution.class);
+        CLIResult result = rawDist.run("start-dev");
+        assertTrue(result.getErrorOutput().isEmpty(), result.getErrorOutput());
+
+        File target = new File("./target");
+
+        // feature change should trigger a build
+        result = rawDist.run("--profile=dev", "export", "--features=docker", "--dir=" + target.getAbsolutePath());
+        result.assertMessage("Updating the configuration and installing your custom providers, if any. Please wait.");
     }
 
 }

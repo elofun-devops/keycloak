@@ -52,7 +52,7 @@ public class LoginTotpPage extends LanguageComboboxAwarePage {
         otpInput.clear();
         if (totp != null) otpInput.sendKeys(totp);
 
-        submitButton.click();
+        UIUtils.clickLink(submitButton);
     }
 
     public String getAlertError() {
@@ -129,7 +129,7 @@ public class LoginTotpPage extends LanguageComboboxAwarePage {
     public void selectOtpCredential(String credentialName) {
         WebElement webElement = driver.findElement(
                 getXPathForLookupCardWithName(credentialName));
-        UIUtils.clickLink(webElement);
+        UIUtils.click(webElement);
     }
 
 

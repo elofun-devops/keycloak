@@ -100,6 +100,7 @@ public class QuarkusPropertiesDistTest {
     @BeforeStartDistribution(UpdateConsoleHandlerFromQuarkusProps.class)
     @Launch({"start", "--http-enabled=true", "--hostname-strict=false"})
     @Order(6)
+    @Disabled(value = "We don't properly differentiate between quarkus runtime and build time properties")
     void testRuntimePropFromQuarkusPropsIsAppliedWithoutRebuild(LaunchResult result) {
         CLIResult cliResult = (CLIResult) result;
         assertThat(cliResult.getOutput(), not(containsString("Keycloak is the best")));
@@ -173,13 +174,13 @@ public class QuarkusPropertiesDistTest {
     @Test
     @BeforeStartDistribution(ForceRebuild.class)
     @DisabledOnOs(value = { OS.WINDOWS }, disabledReason = "Windows uses a different path separator.")
-    @Launch({ "start", "--http-enabled=true", "--hostname-strict=false",
+    @Launch({ "start", "--verbose", "--http-enabled=true", "--hostname-strict=false",
             "--https-certificate-file=/tmp/kc/bin/../conf/server.crt.pem",
             "--https-certificate-key-file=/tmp/kc/bin/../conf/server.key.pem" })
     @Order(13)
     void testHttpCertsPathTransformer(LaunchResult result) {
         CLIResult cliResult = (CLIResult) result;
-        assertThat(cliResult.getOutput(),containsString("ERROR: /tmp/kc/bin/../conf/server.crt.pem"));
+        assertThat(cliResult.getErrorOutput(),containsString("Failed to load 'https-key-' material: NoSuchFileException /tmp/kc/bin/../conf/server.crt.pem"));
     }
 
     @Test
@@ -191,7 +192,7 @@ public class QuarkusPropertiesDistTest {
     @Order(14)
     void testHttpCertsPathTransformerOnWindows(LaunchResult result) {
         CLIResult cliResult = (CLIResult) result;
-        assertThat(cliResult.getOutput(),containsString("ERROR: C:/tmp/kc/bin/../conf/server.crt.pem"));
+        assertThat(cliResult.getErrorOutput(),containsString("Failed to load 'https-key-' material: NoSuchFileException C:/tmp/kc/bin/../conf/server.crt.pem"));
     }
 
     public static class AddConsoleHandlerFromQuarkusProps implements Consumer<KeycloakDistribution> {

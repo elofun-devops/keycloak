@@ -20,6 +20,7 @@ package org.keycloak.testsuite.organization.mapper;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -32,6 +33,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +48,7 @@ import org.keycloak.admin.client.resource.ClientScopeResource;
 import org.keycloak.admin.client.resource.OrganizationResource;
 import org.keycloak.common.util.MultivaluedHashMap;
 import org.keycloak.common.util.UriUtils;
+import org.keycloak.models.OrganizationModel;
 import org.keycloak.organization.protocol.mappers.oidc.OrganizationMembershipMapper;
 import org.keycloak.protocol.ProtocolMapperUtils;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
@@ -56,6 +59,8 @@ import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.RefreshToken;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
+import org.keycloak.representations.idm.FederatedIdentityRepresentation;
+import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.ProtocolMapperRepresentation;
@@ -136,6 +141,7 @@ public class OrganizationOIDCProtocolMapperTest extends AbstractOrganizationTest
         org.keycloak.testsuite.Assert.assertFalse(loginPage.isPasswordInputPresent());
         org.keycloak.testsuite.Assert.assertTrue(loginPage.isSocialButtonPresent(orgA.getAlias() + "-identity-provider"));
         org.keycloak.testsuite.Assert.assertFalse(loginPage.isSocialButtonPresent(orgB.getAlias() + "-identity-provider"));
+        assertFalse(driver.getPageSource().contains("Your email domain matches"));
 
         // identity-first login will respect the organization provided in the scope even though the user email maps to a different organization
         oauth.clientId("broker-app");
@@ -453,6 +459,47 @@ public class OrganizationOIDCProtocolMapperTest extends AbstractOrganizationTest
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    public void testIncludeOrganizationId() throws Exception {
+        OrganizationRepresentation orgRep = createOrganization();
+        OrganizationResource organization = testRealm().organizations().get(orgRep.getId());
+        addMember(organization);
+        setMapperConfig(OrganizationMembershipMapper.ADD_ORGANIZATION_ID, Boolean.TRUE.toString());
+
+        oauth.clientId("direct-grant");
+        oauth.scope("openid organization");
+        AccessTokenResponse response = oauth.doGrantAccessTokenRequest("password", memberEmail, memberPassword);
+        assertThat(response.getScope(), containsString("organization"));
+        AccessToken accessToken = TokenVerifier.create(response.getAccessToken(), AccessToken.class).getToken();
+        assertThat(accessToken.getOtherClaims().keySet(), hasItem(OAuth2Constants.ORGANIZATION));
+        Map<String, Map<String, String>> organizations = (Map<String, Map<String, String>>) accessToken.getOtherClaims().get(OAuth2Constants.ORGANIZATION);
+        assertThat(organizations.keySet(), hasItem(organizationName));
+        assertThat(organizations.get(organizationName).keySet(), hasItem("id"));
+        assertThat(organizations.get(organizationName).get("id"), equalTo(orgRep.getId()));
+
+        // when id is added to tokens, the claim type is a json regardless of the value set in the config
+        setMapperConfig(OrganizationMembershipMapper.ADD_ORGANIZATION_ID, Boolean.TRUE.toString());
+        setMapperConfig(OIDCAttributeMapperHelper.JSON_TYPE, "boolean");
+        response = oauth.doGrantAccessTokenRequest("password", memberEmail, memberPassword);
+        accessToken = TokenVerifier.create(response.getAccessToken(), AccessToken.class).getToken();
+        assertThat(accessToken.getOtherClaims().keySet(), hasItem(OAuth2Constants.ORGANIZATION));
+        organizations = (Map<String, Map<String, String>>) accessToken.getOtherClaims().get(OAuth2Constants.ORGANIZATION);
+        assertThat(organizations.keySet(), hasItem(organizationName));
+        assertThat(organizations.get(organizationName).keySet(), hasItem("id"));
+        assertThat(organizations.get(organizationName).get("id"), equalTo(orgRep.getId()));
+
+        // disabling the attribute should result in no ids in the claims.
+        setMapperConfig(OrganizationMembershipMapper.ADD_ORGANIZATION_ID, Boolean.FALSE.toString());
+        setMapperConfig(OIDCAttributeMapperHelper.JSON_TYPE, "JSON");
+        response = oauth.doGrantAccessTokenRequest("password", memberEmail, memberPassword);
+        accessToken = TokenVerifier.create(response.getAccessToken(), AccessToken.class).getToken();
+        assertThat(accessToken.getOtherClaims().keySet(), hasItem(OAuth2Constants.ORGANIZATION));
+        organizations = (Map<String, Map<String, String>>) accessToken.getOtherClaims().get(OAuth2Constants.ORGANIZATION);
+        assertThat(organizations.keySet(), hasItem(organizationName));
+        assertThat(organizations.get(organizationName).keySet().isEmpty(), is(true));
+    }
+
+    @Test
     public void testOrganizationsClaimAsList() throws Exception {
         OrganizationRepresentation orgA = createOrganization("orga", true);
         MemberRepresentation member = addMember(testRealm().organizations().get(orgA.getId()), "member@" + orgA.getDomains().iterator().next().getName());
@@ -496,6 +543,26 @@ public class OrganizationOIDCProtocolMapperTest extends AbstractOrganizationTest
         oauth.openLoginForm();
         MultivaluedHashMap<String, String> queryParams = UriUtils.decodeQueryString(new URL(driver.getCurrentUrl()).getQuery());
         assertEquals("invalid_scope", queryParams.getFirst("error"));
+    }
+
+    @Test
+    public void testAuthenticatingUsingBroker() {
+        driver.manage().timeouts().pageLoadTimeout(Duration.ofDays(1));
+        OrganizationResource organization = testRealm().organizations().get(createOrganization().getId());
+        IdentityProviderRepresentation idp = organization.identityProviders().get(bc.getIDPAlias()).toRepresentation();
+        idp.getConfig().put(OrganizationModel.ORGANIZATION_DOMAIN_ATTRIBUTE, "neworg.org");
+        testRealm().identityProviders().get(bc.getIDPAlias()).update(idp);
+
+        oauth.scope(OAuth2Constants.ORGANIZATION);
+        openIdentityFirstLoginPage(bc.getUserEmail(), true, idp.getAlias(), false, false);
+
+        loginOrgIdp(bc.getUserEmail(), bc.getUserEmail(),true, true);
+
+        assertIsMember(bc.getUserEmail(), organization);
+        UserRepresentation user = testRealm().users().search(bc.getUserEmail()).get(0);
+        List<FederatedIdentityRepresentation> federatedIdentities = testRealm().users().get(user.getId()).getFederatedIdentity();
+        assertEquals(1, federatedIdentities.size());
+        assertEquals(bc.getIDPAlias(), federatedIdentities.get(0).getIdentityProvider());
     }
 
     private ProtocolMapperRepresentation createGroupMapper() {

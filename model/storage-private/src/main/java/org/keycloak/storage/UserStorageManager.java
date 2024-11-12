@@ -114,17 +114,8 @@ public class UserStorageManager extends AbstractStorageManager<UserStorageProvid
      */
     protected UserModel importValidation(RealmModel realm, UserModel user) {
 
-        if (Profile.isFeatureEnabled(Profile.Feature.ORGANIZATION) && user != null) {
-            // check if provider is enabled and user is managed member of a disabled organization OR provider is disabled and user is managed member
-            OrganizationProvider organizationProvider = session.getProvider(OrganizationProvider.class);
-            if (isOrganizationDisabled(session, user)) {
-                return new ReadOnlyUserModelDelegate(user) {
-                    @Override
-                    public boolean isEnabled() {
-                        return false;
-                    }
-                };
-            }
+        if (isReadOnlyOrganizationMember(user)) {
+            return new ReadOnlyUserModelDelegate(user, false);
         }
 
         if (user == null || user.getFederationLink() == null) return user;
@@ -138,12 +129,7 @@ public class UserStorageManager extends AbstractStorageManager<UserStorageProvid
         }
 
         if (!model.isEnabled()) {
-            return new ReadOnlyUserModelDelegate(user) {
-                @Override
-                public boolean isEnabled() {
-                    return false;
-                }
-            };
+            return new ReadOnlyUserModelDelegate(user, false);
         }
 
         ImportedUserValidation importedUserValidation = getStorageProviderInstance(model, ImportedUserValidation.class, true);
@@ -933,10 +919,22 @@ public class UserStorageManager extends AbstractStorageManager<UserStorageProvid
         return Collections.emptyList();
     }
 
-    private boolean isOrganizationDisabled(KeycloakSession session, UserModel delegate) {
-        // check if provider is enabled and user is managed member of a disabled organization OR provider is disabled and user is managed member
+    private boolean isReadOnlyOrganizationMember(UserModel delegate) {
+        if (delegate == null) {
+            return false;
+        }
+
+        if (!Profile.isFeatureEnabled(Profile.Feature.ORGANIZATION)) {
+            return false;
+        }
+
         OrganizationProvider organizationProvider = session.getProvider(OrganizationProvider.class);
 
+        if (organizationProvider.count() == 0) {
+            return false;
+        }
+
+        // check if provider is enabled and user is managed member of a disabled organization OR provider is disabled and user is managed member
         return organizationProvider.getByMember(delegate)
                 .anyMatch((org) -> (organizationProvider.isEnabled() && org.isManaged(delegate) && !org.isEnabled()) ||
                         (!organizationProvider.isEnabled() && org.isManaged(delegate)));

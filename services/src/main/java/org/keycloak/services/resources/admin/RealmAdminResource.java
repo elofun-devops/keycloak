@@ -30,12 +30,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import jakarta.ws.rs.DefaultValue;
-import org.eclipse.microprofile.openapi.annotations.Operation;
-import org.eclipse.microprofile.openapi.annotations.extensions.Extension;
-import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.GET;
@@ -54,6 +51,9 @@ import jakarta.ws.rs.core.StreamingOutput;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.extensions.Extension;
+import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.NoCache;
@@ -92,6 +92,7 @@ import org.keycloak.models.UserSessionModel;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.models.utils.RepresentationToModel;
+import org.keycloak.organization.admin.resource.OrganizationsResource;
 import org.keycloak.partialimport.PartialImportResult;
 import org.keycloak.partialimport.PartialImportResults;
 import org.keycloak.representations.adapters.action.GlobalRequestResult;
@@ -384,6 +385,7 @@ public class RealmAdminResource {
             rep.setDisplayName(realm.getDisplayName());
             rep.setDisplayNameHtml(realm.getDisplayNameHtml());
             rep.setSupportedLocales(realm.getSupportedLocalesStream().collect(Collectors.toSet()));
+            rep.setBruteForceProtected(realm.isBruteForceProtected());
 
             if (auth.users().canView()) {
                 rep.setRegistrationEmailAsUsername(realm.isRegistrationEmailAsUsername());
@@ -513,6 +515,7 @@ public class RealmAdminResource {
     @Tag(name = KeycloakOpenAPI.Admin.Tags.REALMS_ADMIN)
     @Operation()
     public ManagementPermissionReference getUserMgmtPermissions() {
+        ProfileHelper.requireFeature(Profile.Feature.ADMIN_FINE_GRAINED_AUTHZ);
         auth.realm().requireViewRealm();
 
         AdminPermissionManagement permissions = AdminPermissions.management(session, realm);
@@ -532,6 +535,7 @@ public class RealmAdminResource {
     @Tag(name = KeycloakOpenAPI.Admin.Tags.REALMS_ADMIN)
     @Operation()
     public ManagementPermissionReference setUsersManagementPermissionsEnabled(ManagementPermissionReference ref) {
+        ProfileHelper.requireFeature(Profile.Feature.ADMIN_FINE_GRAINED_AUTHZ);
         auth.realm().requireManageRealm();
 
         AdminPermissionManagement permissions = AdminPermissions.management(session, realm);
@@ -543,8 +547,7 @@ public class RealmAdminResource {
         }
     }
 
-
-    public static ManagementPermissionReference toUsersMgmtRef(AdminPermissionManagement permissions) {
+    private ManagementPermissionReference toUsersMgmtRef(AdminPermissionManagement permissions) {
         ManagementPermissionReference ref = new ManagementPermissionReference();
         ref.setEnabled(true);
         ref.setResource(permissions.users().resource().getId());
@@ -553,6 +556,10 @@ public class RealmAdminResource {
         return ref;
     }
 
+    @Path("organizations")
+    public OrganizationsResource organizations() {
+        return new OrganizationsResource(session, auth, adminEvent);
+    }
 
     @Path("{extension}")
     public Object extension(@PathParam("extension") String extension) {
@@ -1117,7 +1124,7 @@ public class RealmAdminResource {
                         AdminEventBuilder adminEventClone = adminEvent.clone(kcSession);
                         // calling a static method to avoid using the wrong instances
                         return getPartialImportResults(requestBody, kcSession, realmClone, adminEventClone);
-                    })
+                    }, false, "Partial import in realm " + realm.getName())
             ).build();
         } catch (ModelDuplicateException e) {
             throw ErrorResponse.exists(e.getLocalizedMessage());
